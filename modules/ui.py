@@ -75,14 +75,14 @@ PREVIEW_MAX_WIDTH = 1200
 PREVIEW_DEFAULT_WIDTH = 640
 PREVIEW_DEFAULT_HEIGHT = 360
 
-POPUP_WIDTH = 750
+POPUP_WIDTH = 900
 POPUP_HEIGHT = 810
-POPUP_SCROLL_WIDTH = (740,)
+POPUP_SCROLL_WIDTH = (890,)
 POPUP_SCROLL_HEIGHT = 700
 
-POPUP_LIVE_WIDTH = 900
+POPUP_LIVE_WIDTH = 1100
 POPUP_LIVE_HEIGHT = 820
-POPUP_LIVE_SCROLL_WIDTH = (890,)
+POPUP_LIVE_SCROLL_WIDTH = (1090,)
 POPUP_LIVE_SCROLL_HEIGHT = 700
 
 MAPPER_PREVIEW_MAX_HEIGHT = 100
@@ -106,6 +106,8 @@ popup_status_label_live = None
 source_label_dict = {}
 source_label_dict_live = {}
 target_label_dict_live = {}
+swapped_label_dict = {}
+swapped_label_dict_live = {}
 
 img_ft, vid_ft = modules.globals.file_types
 
@@ -687,6 +689,17 @@ def create_source_target_popup(
         target_image.grid(row=id, column=3, padx=10, pady=10)
         target_image.configure(image=tk_image)
 
+        # Add placeholder for swapped preview
+        swapped_image = ctk.CTkLabel(
+            scrollable_frame,
+            text=f"Swapped",
+            width=MAPPER_PREVIEW_MAX_WIDTH,
+            height=MAPPER_PREVIEW_MAX_HEIGHT,
+        )
+        swapped_image.grid(row=id, column=4, padx=10, pady=10)
+        swapped_label_dict[id] = swapped_image
+        update_swapped_preview_in_ui(item, scrollable_frame, id)
+
     popup_status_label = ctk.CTkLabel(POPUP, text=None, justify="center")
     popup_status_label.grid(row=1, column=0, pady=15)
 
@@ -743,6 +756,7 @@ def update_popup_source(
             source_image.grid(row=button_num, column=1, padx=10, pady=10)
             source_image.configure(image=tk_image)
             source_label_dict[button_num] = source_image
+            update_swapped_preview_in_ui(map[button_num], scrollable_frame, button_num)
         else:
             update_pop_status("Face could not be detected in last upload!")
         return map
@@ -766,6 +780,53 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     )
 
     return preview
+
+
+
+def update_swapped_preview_in_ui(map_item, scrollable_frame, button_num, is_live=False):
+    global swapped_label_dict, swapped_label_dict_live
+
+    if "source" in map_item and "target" in map_item and "full_frame_path" in map_item["target"]:
+        target_path = map_item["target"]["full_frame_path"]
+        source_face = map_item["source"]["face"]
+        target_face = map_item["target"]["face"]
+
+        full_frame = None
+        if is_video(target_path):
+            full_frame = get_video_frame(target_path)
+        else:
+            full_frame = cv2.imread(target_path)
+
+        if full_frame is not None:
+            try:
+                from modules.processors.frame.face_swapper import swap_face, get_face_swapper
+                from modules.face_analyser import get_face_analyser
+
+                get_face_analyser()
+                get_face_swapper()
+
+                swapped_frame = swap_face(source_face, target_face, full_frame)
+
+                x_min, y_min, x_max, y_max = target_face["bbox"]
+                h, w = swapped_frame.shape[:2]
+                x_min = max(0, int(x_min))
+                y_min = max(0, int(y_min))
+                x_max = min(w, int(x_max))
+                y_max = min(h, int(y_max))
+
+                swapped_crop = swapped_frame[y_min:y_max, x_min:x_max]
+
+                image = Image.fromarray(cv2.cvtColor(swapped_crop, cv2.COLOR_BGR2RGB))
+                image = image.resize(
+                    (MAPPER_PREVIEW_MAX_WIDTH, MAPPER_PREVIEW_MAX_HEIGHT), Image.LANCZOS
+                )
+                tk_image = ctk.CTkImage(image, size=image.size)
+
+                target_dict = swapped_label_dict_live if is_live else swapped_label_dict
+                if button_num in target_dict:
+                    target_dict[button_num].configure(image=tk_image)
+            except Exception as e:
+                print(f"Failed to generate swapped preview: {e}")
 
 
 def update_status(text: str) -> None:
@@ -1368,6 +1429,10 @@ def clear_source_target_images(map: list):
         target_label_dict_live[button_num].destroy()
         del target_label_dict_live[button_num]
 
+    for button_num in list(swapped_label_dict_live.keys()):
+        swapped_label_dict_live[button_num].destroy()
+        del swapped_label_dict_live[button_num]
+
 
 def refresh_data(map: list):
     global POPUP_LIVE
@@ -1448,6 +1513,16 @@ def refresh_data(map: list):
             target_image.grid(row=id, column=4, padx=20, pady=10)
             target_image.configure(image=tk_image)
 
+            swapped_image = ctk.CTkLabel(
+                scrollable_frame,
+                text=f"Swapped",
+                width=MAPPER_PREVIEW_MAX_WIDTH,
+                height=MAPPER_PREVIEW_MAX_HEIGHT,
+            )
+            swapped_image.grid(row=id, column=5, padx=20, pady=10)
+            swapped_label_dict_live[id] = swapped_image
+            update_swapped_preview_in_ui(item, scrollable_frame, id, is_live=True)
+
 
 def update_webcam_source(
         scrollable_frame: ctk.CTkScrollableFrame, map: list, button_num: int
@@ -1496,6 +1571,7 @@ def update_webcam_source(
             source_image.grid(row=button_num, column=1, padx=10, pady=10)
             source_image.configure(image=tk_image)
             source_label_dict_live[button_num] = source_image
+            update_swapped_preview_in_ui(map[button_num], scrollable_frame, button_num, is_live=True)
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
@@ -1516,6 +1592,8 @@ def update_webcam_target(
         map[button_num].pop("target")
         target_label_dict_live[button_num].destroy()
         del target_label_dict_live[button_num]
+        if button_num in swapped_label_dict_live:
+            swapped_label_dict_live[button_num].configure(image=None)
 
     if target_path == "":
         return map
@@ -1529,6 +1607,7 @@ def update_webcam_target(
             map[button_num]["target"] = {
                 "cv2": cv2_img[int(y_min): int(y_max), int(x_min): int(x_max)],
                 "face": face,
+                "full_frame_path": target_path,
             }
 
             image = Image.fromarray(
@@ -1548,6 +1627,7 @@ def update_webcam_target(
             target_image.grid(row=button_num, column=4, padx=20, pady=10)
             target_image.configure(image=tk_image)
             target_label_dict_live[button_num] = target_image
+            update_swapped_preview_in_ui(map[button_num], scrollable_frame, button_num, is_live=True)
         else:
             update_pop_live_status("Face could not be detected in last upload!")
         return map
