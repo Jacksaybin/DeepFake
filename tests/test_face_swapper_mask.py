@@ -123,6 +123,67 @@ class CreateFaceMaskTests(unittest.TestCase):
         one_dimensional_frame = types.SimpleNamespace(shape=(10,))
         self.assert_empty_mask(face_swapper, one_dimensional_frame)
 
+    def test_create_face_mask_returns_empty_mask_when_face_is_none(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        frame = types.SimpleNamespace(shape=(10, 10))
+        result = face_swapper.create_face_mask(None, frame)
+        self.assertEqual(result.shape, (10, 10))
+        self.assertEqual(result.size, 100) # Since it returns an empty FakeArray with zeros
+
+    def test_create_face_mask_returns_empty_mask_when_face_has_no_landmarks(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        frame = types.SimpleNamespace(shape=(10, 10))
+        face = types.SimpleNamespace()
+        result = face_swapper.create_face_mask(face, frame)
+        self.assertEqual(result.shape, (10, 10))
+
+    def test_create_face_mask_returns_empty_mask_when_landmarks_is_none(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        frame = types.SimpleNamespace(shape=(10, 10))
+        face = types.SimpleNamespace(landmark_2d_106=None)
+        result = face_swapper.create_face_mask(face, frame)
+        self.assertEqual(result.shape, (10, 10))
+
+    def test_create_face_mask_returns_empty_mask_when_landmarks_is_not_ndarray(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        frame = types.SimpleNamespace(shape=(10, 10))
+        face = types.SimpleNamespace(landmark_2d_106=[])
+        result = face_swapper.create_face_mask(face, frame)
+        self.assertEqual(result.shape, (10, 10))
+
+    def test_create_face_mask_returns_empty_mask_when_landmarks_has_less_than_106_elements(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        frame = types.SimpleNamespace(shape=(10, 10))
+        face = types.SimpleNamespace(landmark_2d_106=face_swapper.np.ndarray((105,)))
+        result = face_swapper.create_face_mask(face, frame)
+        self.assertEqual(result.shape, (10, 10))
+
+    def test_create_face_mask_returns_empty_mask_when_landmarks_has_non_finite_values(self) -> None:
+        face_swapper = _load_face_swapper_module()
+        frame = types.SimpleNamespace(shape=(10, 10))
+        face = types.SimpleNamespace(landmark_2d_106=face_swapper.np.ndarray((106,)))
+
+        original_all = getattr(face_swapper.np, 'all', None)
+        original_isfinite = getattr(face_swapper.np, 'isfinite', None)
+
+        try:
+            face_swapper.np.all = lambda x: False
+            face_swapper.np.isfinite = lambda x: False
+            result = face_swapper.create_face_mask(face, frame)
+        finally:
+            if original_all is not None:
+                face_swapper.np.all = original_all
+            else:
+                delattr(face_swapper.np, 'all')
+
+            if original_isfinite is not None:
+                face_swapper.np.isfinite = original_isfinite
+            else:
+                if hasattr(face_swapper.np, 'isfinite'):
+                    delattr(face_swapper.np, 'isfinite')
+
+        self.assertEqual(result.shape, (10, 10))
+
 
 if __name__ == "__main__":
     unittest.main()
