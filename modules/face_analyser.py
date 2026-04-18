@@ -133,7 +133,8 @@ def get_unique_faces_from_target_image() -> Any:
                 'id' : i, 
                 'target' : {
                             'cv2' : target_frame[int(y_min):int(y_max), int(x_min):int(x_max)],
-                            'face' : face
+                            'face' : face,
+                            'full_frame_path': modules.globals.target_path
                             }
                 })
             i = i + 1
@@ -211,7 +212,8 @@ def default_target_face():
         target_frame = cv2.imread(best_frame['location'])
         map['target'] = {
                         'cv2' : target_frame[int(y_min):int(y_max), int(x_min):int(x_max)],
-                        'face' : best_face
+                        'face' : best_face,
+                        'full_frame_path': best_frame['location']
                         }
 
 
