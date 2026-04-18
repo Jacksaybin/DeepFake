@@ -35,6 +35,11 @@ def _load_face_swapper_module():
         lambda *args, **kwargs: (True, types.SimpleNamespace(tofile=lambda *_: None)),
     )
     fake_insightface = types.ModuleType("insightface")
+    fake_insightface_utils = types.ModuleType("insightface.utils")
+    setattr(fake_insightface_utils, "face_align", types.ModuleType("face_align"))
+    setattr(fake_insightface, "utils", fake_insightface_utils)
+
+    fake_onnxruntime = types.ModuleType("onnxruntime")
 
     fake_globals = types.ModuleType("modules.globals")
     fake_globals.execution_providers = []
@@ -75,6 +80,8 @@ def _load_face_swapper_module():
         {
             "cv2": fake_cv2,
             "insightface": fake_insightface,
+            "insightface.utils": fake_insightface_utils,
+            "onnxruntime": fake_onnxruntime,
             "numpy": fake_numpy,
             "modules.globals": fake_globals,
             "modules.processors.frame.core": fake_core,
