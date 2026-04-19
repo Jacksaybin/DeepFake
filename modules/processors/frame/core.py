@@ -81,29 +81,22 @@ def set_frame_processors_modules_from_ui(frame_processors: List[str]) -> None:
                  print(f"Warning: Error removing frame processor {frame_processor}: {e}")
 
 def multi_process_frame(source_path: str, temp_frame_paths: List[str], process_frames: Callable[[str, List[str], Any], None], progress: Any = None) -> None:
-    """Process frames in parallel with optimized batching and memory management."""
-    max_workers = modules.globals.execution_threads
-    
-    # Determine optimal batch size based on available memory and thread count
-    # Process frames in batches to avoid memory overflow
-    batch_size = max(1, min(32, len(temp_frame_paths) // max(1, max_workers)))
-    
+    """Process frames in parallel with optimized batching for Intel Core i5 (2 workers)."""
+    max_workers = modules.globals.execution_threads or 2
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Process in batches to manage memory better
-        for i in range(0, len(temp_frame_paths), batch_size):
-            batch = temp_frame_paths[i:i + batch_size]
-            futures = []
-            
-            for path in batch:
-                future = executor.submit(process_frames, source_path, [path], progress)
-                futures.append(future)
-            
-            # Wait for batch to complete before starting next batch
-            for future in futures:
-                try:
-                    future.result()
-                except Exception as e:
-                    print(f"Error processing frame: {e}")
+        # Submit all frames at once — ThreadPoolExecutor queues internally.
+        # This is simpler and prevents the manual batch loop from serialising
+        # groups of frames when the last future in a batch is slow.
+        futures = [
+            executor.submit(process_frames, source_path, [path], progress)
+            for path in temp_frame_paths
+        ]
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                print(f"Error processing frame: {e}")
 
 
 def process_video(source_path: str, frame_paths: list[str], process_frames: Callable[[str, List[str], Any], None]) -> None:
@@ -203,13 +196,13 @@ def process_video_in_memory(source_path: str, target_path: str, fps: float) -> b
     if not is_hw_encoder:
         if encoder == 'libx264':
             encoder_options = [
-                '-preset', 'medium',
+                '-preset', 'faster',
                 '-crf', str(modules.globals.video_quality),
                 '-tune', 'film',
             ]
         elif encoder == 'libx265':
             encoder_options = [
-                '-preset', 'medium',
+                '-preset', 'faster',
                 '-crf', str(modules.globals.video_quality),
                 '-x265-params', 'log-level=error',
             ]
@@ -225,7 +218,7 @@ def process_video_in_memory(source_path: str, target_path: str, fps: float) -> b
         # Software fallback
         sw_encoder = 'libx264'
         sw_options = [
-            '-preset', 'medium',
+            '-preset', 'faster',
             '-crf', str(modules.globals.video_quality),
             '-tune', 'film',
         ]
@@ -270,9 +263,12 @@ def _run_pipe_pipeline(
     """Run the FFmpeg-pipe read → process → encode pipeline once."""
 
     # --- Reader: decode source video to raw BGR24 on stdout ---
+    import platform as _platform
+    _hwaccel = 'videotoolbox' if _platform.system() == 'Darwin' else 'auto'
     reader_cmd = [
         'ffmpeg', '-hide_banner',
-        '-hwaccel', 'auto',
+        '-hwaccel', _hwaccel,
+        '-threads', '4',           # I/O-bound decode: use all logical threads
         '-i', target_path,
         '-f', 'rawvideo',
         '-pix_fmt', 'bgr24',

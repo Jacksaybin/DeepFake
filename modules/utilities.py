@@ -17,25 +17,35 @@ TEMP_DIRECTORY = "temp"
 
 
 def run_ffmpeg(args: List[str]) -> bool:
-    """Run ffmpeg with hardware acceleration and optimized settings."""
+    """Run ffmpeg with settings optimised for Intel Core i5 MBP 2017."""
+    import platform
+    is_mac = platform.system().lower() == 'darwin'
+
+    # Intel Mac: use VideoToolbox for hardware-accelerated decode.
+    # 'auto' sometimes picks a slower software fallback; explicit 'videotoolbox'
+    # always uses the Apple media engine for H.264/HEVC decode.
+    hwaccel_args = ['-hwaccel', 'videotoolbox'] if is_mac else ['-hwaccel', 'auto']
+
+    # Use all 4 logical threads for demux / decode / mux stages.
+    # These are I/O-bound operations that benefit from more threads without
+    # competing with the ONNX inference threads (different stage).
     commands = [
-        "ffmpeg",
-        "-hide_banner",
-        "-hwaccel", "auto",  # Auto-detect hardware acceleration
-        "-hwaccel_output_format", "auto",  # Use hardware format when possible
-        "-threads", str(modules.globals.execution_threads or 0),  # 0 = auto-detect optimal thread count
-        "-loglevel", modules.globals.log_level,
+        'ffmpeg',
+        '-hide_banner',
+        *hwaccel_args,
+        '-threads', '4',
+        '-loglevel', modules.globals.log_level,
     ]
     commands.extend(args)
     try:
         subprocess.check_output(commands, stderr=subprocess.STDOUT)
         return True
     except subprocess.CalledProcessError as error:
-        output = error.output.decode(errors="ignore").strip()
+        output = error.output.decode(errors='ignore').strip()
         if output:
             print(output)
     except Exception as error:
-        print(f"ffmpeg execution failed: {error}")
+        print(f'ffmpeg execution failed: {error}')
     return False
 
 
@@ -127,17 +137,32 @@ def create_video(target_path: str, fps: float = 30.0) -> bool:
                 "-qp_i", str(modules.globals.video_quality),
                 "-qp_p", str(modules.globals.video_quality),
             ]
+    elif platform.system().lower() == 'darwin':
+        # Mac hardware encoding (Intel Quick Sync or Apple Silicon Media Engine)
+        if encoder == 'libx264':
+            encoder = 'h264_videotoolbox'
+            vq = max(1, 100 - int((modules.globals.video_quality / 51.0) * 100))
+            encoder_options = [
+                "-q:v", str(vq),
+            ]
+        elif encoder == 'libx265':
+            encoder = 'hevc_videotoolbox'
+            vq = max(1, 100 - int((modules.globals.video_quality / 51.0) * 100))
+            encoder_options = [
+                "-q:v", str(vq),
+            ]
     else:
-        # CPU encoding with optimized settings
+        # CPU encoding — 'faster' preset is 2-3x quicker than 'medium'
+        # on a dual-core Intel with negligible quality difference at CRF 18
         if encoder == 'libx264':
             encoder_options = [
-                "-preset", "medium",  # Balance speed/quality
+                "-preset", "faster",
                 "-crf", str(modules.globals.video_quality),
-                "-tune", "film",  # Optimize for film content
+                "-tune", "film",
             ]
         elif encoder == 'libx265':
             encoder_options = [
-                "-preset", "medium",
+                "-preset", "faster",
                 "-crf", str(modules.globals.video_quality),
                 "-x265-params", "log-level=error",
             ]
@@ -170,7 +195,8 @@ def create_video(target_path: str, fps: float = 30.0) -> bool:
     # Try with hardware encoder first, fallback to software if it fails
     success = run_ffmpeg(ffmpeg_args)
     
-    if not success and encoder in ['h264_nvenc', 'hevc_nvenc', 'h264_amf', 'hevc_amf']:
+    hw_encoders = ['h264_nvenc', 'hevc_nvenc', 'h264_amf', 'hevc_amf', 'h264_videotoolbox', 'hevc_videotoolbox']
+    if not success and encoder in hw_encoders:
         # Fallback to software encoding
         print(f"Hardware encoding with {encoder} failed, falling back to software encoding...")
         fallback_encoder = 'libx264' if 'h264' in encoder else 'libx265'

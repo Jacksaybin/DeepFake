@@ -1,4 +1,4 @@
-<h1 align="center">Deep-Live-Cam 2.1.3</h1>
+<h1 align="center">Live DeepFake 3.0 (Optimized for Mac/PC)</h1>
 
 <p align="center">
   Real-time face swap and video deepfake with a single click and only a single image.
@@ -38,13 +38,18 @@ Users are expected to use this software responsibly and legally. If using a real
  
 ###### These Pre-builts are perfect for non-technical users or those who don't have time to, or can't manually install all the requirements. Just a heads-up: this is an open-source project, so you can also install it manually. 
 
-## TLDR; Live Deepfake in just 3 Clicks
+## TLDR; Live Deepfake in just 4 Clicks
 ![easysteps](https://github.com/user-attachments/assets/af825228-852c-411b-b787-ffd9aac72fc6)
 1. Select a face
 2. Select which camera to use
-3. Press live!
+3. Press **Live** to preview, or **Virtual Camera** (Red button) to output to OBS!
+4. In OBS/Zoom/Teams, select **OBS Virtual Camera** as your webcam.
 
 ## Features & Uses - Everything is in real-time
+
+### 🎥 OBS Virtual Camera Mode (New!)
+- Output your swapped face directly to OBS, Zoom, or Discord in **HD 720p**.
+- Double-click the Live preview window to enter **Borderless OBS Mode**.
 
 ### Mouth Mask
 
@@ -300,14 +305,15 @@ python run.py --execution-provider openvino
 -   Click "Start".
 -   The output will be saved in a directory named after the target video.
 
-**2. Webcam Mode**
+**2. Webcam Mode & OBS Streaming**
 
 -   Execute `python run.py`.
 -   Select a source face image.
--   Click "Live".
--   Wait for the preview to appear (10-30 seconds).
--   Use a screen capture tool like OBS to stream.
--   To change the face, select a new source image.
+-   Select your webcam device from the dropdown.
+-   Click **Live** to view the preview window.
+-   Click the red **Virtual Camera** button to pipe the HD output to OBS.
+-   In OBS Studio, add a **Window Capture** or select **OBS Virtual Camera** in Zoom/Teams to stream.
+-   *Pro Tip:* Double-click the Live preview window to hide borders for clean capturing.
 
 ## Download all models in this huggingface link
 - [**Download models here**](https://huggingface.co/hacksider/deep-live-cam/tree/main)

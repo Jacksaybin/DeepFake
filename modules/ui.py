@@ -70,10 +70,10 @@ ROOT_HEIGHT = 800
 ROOT_WIDTH = 600
 
 PREVIEW = None
-PREVIEW_MAX_HEIGHT = 700
-PREVIEW_MAX_WIDTH = 1200
-PREVIEW_DEFAULT_WIDTH = 640
-PREVIEW_DEFAULT_HEIGHT = 360
+PREVIEW_MAX_HEIGHT = 1080
+PREVIEW_MAX_WIDTH = 1920
+PREVIEW_DEFAULT_WIDTH = 1280
+PREVIEW_DEFAULT_HEIGHT = 720
 
 POPUP_WIDTH = 900
 POPUP_HEIGHT = 810
@@ -108,6 +108,8 @@ source_label_dict_live = {}
 target_label_dict_live = {}
 swapped_label_dict = {}
 swapped_label_dict_live = {}
+progress_bar = None      # FIX #4
+cancel_button = None     # FIX #4
 
 img_ft, vid_ft = modules.globals.file_types
 
@@ -125,63 +127,83 @@ def init(start: Callable[[], None], destroy: Callable[[], None], lang: str) -> c
 
 def save_switch_states():
     switch_states = {
-        "keep_fps": modules.globals.keep_fps,
-        "keep_audio": modules.globals.keep_audio,
-        "keep_frames": modules.globals.keep_frames,
-        "many_faces": modules.globals.many_faces,
-        "map_faces": modules.globals.map_faces,
-        "poisson_blend": modules.globals.poisson_blend,
-        "color_correction": modules.globals.color_correction,
-        "nsfw_filter": modules.globals.nsfw_filter,
-        "live_mirror": modules.globals.live_mirror,
-        "live_resizable": modules.globals.live_resizable,
-        "fp_ui": modules.globals.fp_ui,
-        "show_fps": modules.globals.show_fps,
-        "mouth_mask": modules.globals.mouth_mask,
-        "show_mouth_mask_box": modules.globals.show_mouth_mask_box,
-        "mouth_mask_size": modules.globals.mouth_mask_size,
+        "keep_fps":             modules.globals.keep_fps,
+        "keep_audio":           modules.globals.keep_audio,
+        "keep_frames":          modules.globals.keep_frames,
+        "many_faces":           modules.globals.many_faces,
+        "map_faces":            modules.globals.map_faces,
+        "poisson_blend":        modules.globals.poisson_blend,
+        "color_correction":     modules.globals.color_correction,
+        "nsfw_filter":          modules.globals.nsfw_filter,
+        "live_mirror":          modules.globals.live_mirror,
+        "live_resizable":       modules.globals.live_resizable,
+        "fp_ui":                modules.globals.fp_ui,
+        "show_fps":             modules.globals.show_fps,
+        "mouth_mask":           modules.globals.mouth_mask,
+        "show_mouth_mask_box":  modules.globals.show_mouth_mask_box,
+        "mouth_mask_size":      modules.globals.mouth_mask_size,
+        # FIX #1 — persist slider values
+        "opacity":              getattr(modules.globals, "opacity", 1.0),
+        "sharpness":            getattr(modules.globals, "sharpness", 0.0),
+        "target_live_fps":      getattr(modules.globals, "target_live_fps", 15),
+        # FIX #3 — persist recent directories
+        "recent_dir_source":    getattr(modules.globals, "recent_dir_source", None),
+        "recent_dir_target":    getattr(modules.globals, "recent_dir_target", None),
+        "recent_dir_output":    getattr(modules.globals, "recent_dir_output", None),
     }
-    with open("switch_states.json", "w") as f:
-        json.dump(switch_states, f)
+    try:
+        with open("switch_states.json", "w") as f:
+            json.dump(switch_states, f, indent=2)
+    except Exception as e:
+        print(f"[UI] Warning: could not save switch states: {e}")
 
 
 def load_switch_states():
     try:
         with open("switch_states.json", "r") as f:
             switch_states = json.load(f)
-        modules.globals.keep_fps = switch_states.get("keep_fps", True)
-        modules.globals.keep_audio = switch_states.get("keep_audio", True)
-        modules.globals.keep_frames = switch_states.get("keep_frames", False)
-        modules.globals.many_faces = switch_states.get("many_faces", False)
-        modules.globals.map_faces = switch_states.get("map_faces", False)
-        modules.globals.poisson_blend = switch_states.get("poisson_blend", True)
+        modules.globals.keep_fps         = switch_states.get("keep_fps",         True)
+        modules.globals.keep_audio       = switch_states.get("keep_audio",       True)
+        modules.globals.keep_frames      = switch_states.get("keep_frames",      False)
+        modules.globals.many_faces       = switch_states.get("many_faces",       False)
+        modules.globals.map_faces        = switch_states.get("map_faces",        False)
+        modules.globals.poisson_blend    = switch_states.get("poisson_blend",    True)
         modules.globals.color_correction = switch_states.get("color_correction", False)
-        modules.globals.nsfw_filter = switch_states.get("nsfw_filter", False)
-        modules.globals.live_mirror = switch_states.get("live_mirror", False)
-        modules.globals.live_resizable = switch_states.get("live_resizable", False)
-        modules.globals.fp_ui = switch_states.get("fp_ui", {"face_enhancer": True})
-        modules.globals.show_fps = switch_states.get("show_fps", False)
-        modules.globals.mouth_mask_size = switch_states.get("mouth_mask_size", 0.0)
-        # mouth_mask is driven by the slider: on if size > 0, off if 0
-        modules.globals.mouth_mask = modules.globals.mouth_mask_size > 0
+        modules.globals.nsfw_filter      = switch_states.get("nsfw_filter",      False)
+        modules.globals.live_mirror      = switch_states.get("live_mirror",      False)
+        modules.globals.live_resizable   = switch_states.get("live_resizable",   False)
+        modules.globals.fp_ui            = switch_states.get("fp_ui",            {"face_enhancer": True})
+        modules.globals.show_fps         = switch_states.get("show_fps",         False)
+        modules.globals.mouth_mask_size  = switch_states.get("mouth_mask_size",  0.0)
+        modules.globals.mouth_mask       = modules.globals.mouth_mask_size > 0
         modules.globals.show_mouth_mask_box = False  # always start hidden
+        # FIX #1 — restore slider values
+        modules.globals.opacity          = switch_states.get("opacity",   1.0)
+        modules.globals.sharpness        = switch_states.get("sharpness", 0.0)
+        modules.globals.target_live_fps  = switch_states.get("target_live_fps", 15)
+        # FIX #3 — restore recent directories
+        modules.globals.recent_dir_source = switch_states.get("recent_dir_source")
+        modules.globals.recent_dir_target = switch_states.get("recent_dir_target")
+        modules.globals.recent_dir_output = switch_states.get("recent_dir_output")
     except FileNotFoundError:
-        # Nếu chưa có file lưu, dùng giá trị mặc định chất lượng cao
-        modules.globals.poisson_blend = True
-        modules.globals.fp_ui = {"face_enhancer": True}
-        
-        # Tối ưu cho Mac Apple Silicon
+        # Lần đầu chạy — áp dụng cài đặt mặc định chất lượng cao (Full HD recommended)
+        modules.globals.poisson_blend    = True    # Poisson blend ON
+        modules.globals.sharpness        = 2.2     # 2-pass unsharp mask
+        modules.globals.opacity          = 1.0
+        modules.globals.fp_ui            = {"face_enhancer": True,
+                                            "face_enhancer_gpen256": False,
+                                            "face_enhancer_gpen512": False}  # GFPGAN ON
         if platform.system() == 'Darwin':
             try:
                 cv2.setUseOptimized(True)
                 cv2.setNumThreads(os.cpu_count() or 4)
-                
                 import onnxruntime
                 if 'CoreMLExecutionProvider' in onnxruntime.get_available_providers():
                     modules.globals.execution_providers = ['CoreMLExecutionProvider', 'CPUExecutionProvider']
-            except:
+            except Exception:
                 pass
-        pass
+    except Exception as e:
+        print(f"[UI] Warning: could not load switch states: {e}")
 
 
 def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.CTk:
@@ -373,9 +395,8 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     preview_button.place(relx=0.65, rely=0.78, relwidth=0.2, relheight=0.04)
     ToolTip(preview_button, _("Show/hide a preview of the processed output"))
 
-    # --- Camera Selection ---
     camera_label = ctk.CTkLabel(root, text=_("Select Camera:"))
-    camera_label.place(relx=0.1, rely=0.83, relwidth=0.2, relheight=0.03)
+    camera_label.place(relx=0.03, rely=0.83, relwidth=0.18, relheight=0.03)
 
     available_cameras = get_available_cameras()
     camera_indices, camera_names = available_cameras
@@ -394,8 +415,15 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             root, variable=camera_variable, values=camera_names
         )
 
-    camera_optionmenu.place(relx=0.35, rely=0.83, relwidth=0.25, relheight=0.03)
+    camera_optionmenu.place(relx=0.22, rely=0.83, relwidth=0.33, relheight=0.03)
     ToolTip(camera_optionmenu, _("Select which camera to use for live mode"))
+
+    refresh_cam_button = ctk.CTkButton(
+        root, text="🔄", cursor="hand2", width=30,
+        command=lambda: camera_optionmenu.configure(values=get_available_cameras()[1])
+    )
+    refresh_cam_button.place(relx=0.56, rely=0.83, relwidth=0.05, relheight=0.03)
+    ToolTip(refresh_cam_button, _("Refresh available cameras"))
 
     live_button = ctk.CTkButton(
         root,
@@ -415,8 +443,31 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
             else "disabled"
         ),
     )
-    live_button.place(relx=0.65, rely=0.83, relwidth=0.2, relheight=0.03)
+    live_button.place(relx=0.62, rely=0.83, relwidth=0.12, relheight=0.03)
     ToolTip(live_button, _("Start real-time face swap using webcam"))
+
+    virtual_cam_button = ctk.CTkButton(
+        root,
+        text=_("Virtual Camera"),
+        fg_color="#db3236", hover_color="#c82a2e",
+        cursor="hand2",
+        command=lambda: webcam_preview(
+            root,
+            (
+                camera_indices[camera_names.index(camera_variable.get())]
+                if camera_names and camera_names[0] != "No cameras found"
+                else None
+            ),
+            use_virtual_cam=True
+        ),
+        state=(
+            "normal"
+            if camera_names and camera_names[0] != "No cameras found"
+            else "disabled"
+        ),
+    )
+    virtual_cam_button.place(relx=0.75, rely=0.83, relwidth=0.18, relheight=0.03)
+    ToolTip(virtual_cam_button, _("Output real-time face swap to OBS Virtual Camera"))
     # --- End Camera Selection ---
 
     # --- Face Enhancer Dropdown ---
@@ -461,27 +512,23 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     enhancer_dropdown.place(relx=0.35, rely=0.62, relwidth=0.3, relheight=0.03)
     ToolTip(enhancer_dropdown, _("Select a face enhancement model (None = no enhancement)"))
 
-    # 1) Define a DoubleVar for transparency (0 = fully transparent, 1 = fully opaque)
-    transparency_var = ctk.DoubleVar(value=1.0)
+    # 1) Transparency slider — init from persisted globals
+    transparency_var = ctk.DoubleVar(value=modules.globals.opacity)
 
     def on_transparency_change(value: float):
-        # Convert slider value to float
         val = float(value)
-        modules.globals.opacity = val  # Set global opacity
+        modules.globals.opacity = val
         percentage = int(val * 100)
-
         if percentage == 0:
             modules.globals.fp_ui["face_enhancer"] = False
-            status_label.configure(text=_("Transparency set to 0% - Face swapping disabled."))
-            ROOT.update()
+            update_status("Transparency set to 0% - Face swapping disabled.")
         elif percentage == 100:
             modules.globals.face_swapper_enabled = True
-            status_label.configure(text=_("Transparency set to 100%."))
-            ROOT.update()
+            update_status("Transparency set to 100%.")
         else:
             modules.globals.face_swapper_enabled = True
-            status_label.configure(text=_("Transparency set to {}%").format(percentage))
-            ROOT.update()
+            update_status(_("Transparency set to {}%").format(percentage))
+        save_switch_states()  # FIX #1: persist immediately
 
     # 2) Transparency label and slider
     transparency_label = ctk.CTkLabel(root, text=_("Transparency:"))
@@ -504,12 +551,13 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     transparency_slider.place(relx=0.35, rely=0.67, relwidth=0.5, relheight=0.02)
     ToolTip(transparency_slider, _("Blend between original and swapped face (0% = original, 100% = fully swapped)"))
 
-    # 3) Sharpness label & slider
-    sharpness_var = ctk.DoubleVar(value=0.0)  # start at 0.0
+    # 3) Sharpness slider — init from persisted globals
+    sharpness_var = ctk.DoubleVar(value=modules.globals.sharpness)
+
     def on_sharpness_change(value: float):
         modules.globals.sharpness = float(value)
-        status_label.configure(text=_("Sharpness set to {}").format(f"{value:.1f}"))
-        ROOT.update()
+        update_status(_("Sharpness set to {}").format(f"{value:.1f}"))
+        save_switch_states()  # FIX #1: persist immediately
 
     sharpness_label = ctk.CTkLabel(root, text=_("Sharpness:"))
     sharpness_label.place(relx=0.15, rely=0.69, relwidth=0.2, relheight=0.03)
@@ -577,15 +625,79 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     mouth_mask_size_slider.bind("<ButtonRelease-1>", on_mouth_mask_slider_release)
     ToolTip(mouth_mask_size_slider, _("0 = use swapped mouth, 100 = expose original mouth to chin area"))
 
-    # Status and link at the bottom
+    # 5) FPS Limit Slider
+    fps_limit_var = ctk.IntVar(value=getattr(modules.globals, 'target_live_fps', 15))
+
+    fps_limit_label_text = ctk.CTkLabel(root, text=_("Live FPS:"))
+    fps_limit_label_text.place(relx=0.15, rely=0.75, relwidth=0.2, relheight=0.03)
+
+    fps_limit_value_label = ctk.CTkLabel(
+        root, text=f"{fps_limit_var.get()} FPS",
+        text_color="#28a745"
+    )
+    fps_limit_value_label.place(relx=0.84, rely=0.75, relwidth=0.1, relheight=0.03)
+
+    def on_fps_limit_change(value: float):
+        val = int(round(float(value)))
+        modules.globals.target_live_fps = val
+        fps_limit_value_label.configure(text=f"{val} FPS")
+        save_switch_states()
+
+    fps_limit_slider = ctk.CTkSlider(
+        root,
+        from_=5,
+        to=30,
+        number_of_steps=25,
+        variable=fps_limit_var,
+        command=on_fps_limit_change,
+        fg_color="#E0E0E0",
+        progress_color="#28a745",
+        button_color="#FFFFFF",
+        button_hover_color="#CCCCCC",
+        height=5,
+        border_width=1,
+        corner_radius=3,
+    )
+    fps_limit_slider.place(relx=0.35, rely=0.76, relwidth=0.48, relheight=0.02)
+    ToolTip(fps_limit_slider, _("Cap the processing frame rate (5=battery saver, 30=max smooth)"))
+
+    # Status label (above progress bar)
     global status_label
     status_label = ctk.CTkLabel(root, text=None, justify="center")
-    status_label.place(relx=0.1, rely=0.75, relwidth=0.8)
+    status_label.place(relx=0.1, rely=0.79, relwidth=0.8)
+
+    # --- Progress Bar + Cancel Button (FIX #4) ---
+    global progress_bar, cancel_button
+    progress_bar = ctk.CTkProgressBar(
+        root,
+        fg_color="#E0E0E0",
+        progress_color="#007BFF",
+        corner_radius=3,
+        height=8,
+    )
+    progress_bar.set(0)
+    progress_bar.place(relx=0.1, rely=0.86, relwidth=0.8, relheight=0.01)
+
+    cancel_button = ctk.CTkButton(
+        root,
+        text=_("Cancel"),
+        cursor="hand2",
+        fg_color="#CC3333",
+        hover_color="#AA2222",
+        command=lambda: (
+            setattr(modules.globals, "processing_cancelled", True),
+            update_status("Cancelling..."),
+        ),
+        state="disabled",
+    )
+    cancel_button.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.03)
+    ToolTip(cancel_button, _("Cancel the current processing job"))
+    # --- End Progress Bar ---
 
     donate_label = ctk.CTkLabel(
         root, text="Deep Live Cam", justify="center", cursor="hand2"
     )
-    donate_label.place(relx=0.1, rely=0.87, relwidth=0.8)
+    donate_label.place(relx=0.1, rely=0.90, relwidth=0.8)
     donate_label.configure(
         text_color=ctk.ThemeManager.theme.get("URL").get("text_color")
     )
@@ -768,16 +880,39 @@ def create_preview(parent: ctk.CTkToplevel) -> ctk.CTkToplevel:
     preview = ctk.CTkToplevel(parent)
     preview.withdraw()
     preview.title(_("Preview"))
-    preview.configure()
+    # Set background to black for clean OBS window capture
+    preview.configure(fg_color="black")
     preview.protocol("WM_DELETE_WINDOW", lambda: toggle_preview())
     preview.resizable(width=True, height=True)
 
-    preview_label = ctk.CTkLabel(preview, text=None)
+    preview_label = ctk.CTkLabel(preview, text=None, fg_color="black", bg_color="black")
     preview_label.pack(fill="both", expand=True)
 
     preview_slider = ctk.CTkSlider(
         preview, from_=0, to=0, command=lambda frame_value: update_preview(frame_value)
     )
+
+    # --- OBS Mode (Borderless Window) ---
+    def toggle_obs_mode(event):
+        current = preview.overrideredirect()
+        preview.overrideredirect(not current)
+        # MacOS specific focus fix after overrideredirect
+        if not current:
+            preview.focus_force()
+
+    def start_move(event):
+        preview._drag_start_x = event.x
+        preview._drag_start_y = event.y
+
+    def do_move(event):
+        if preview.overrideredirect():
+            x = preview.winfo_x() + event.x - getattr(preview, '_drag_start_x', event.x)
+            y = preview.winfo_y() + event.y - getattr(preview, '_drag_start_y', event.y)
+            preview.geometry(f"+{x}+{y}")
+
+    preview_label.bind("<Double-1>", toggle_obs_mode)
+    preview_label.bind("<ButtonPress-1>", start_move)
+    preview_label.bind("<B1-Motion>", do_move)
 
     return preview
 
@@ -830,8 +965,20 @@ def update_swapped_preview_in_ui(map_item, scrollable_frame, button_num, is_live
 
 
 def update_status(text: str) -> None:
-    status_label.configure(text=_(text))
-    ROOT.update()
+    """Thread-safe status update — safe to call from background threads."""
+    # FIX #2: Tkinter widgets must only be touched from the main thread.
+    # ROOT.after() schedules the update on the Tk event loop.
+    if ROOT and ROOT.winfo_exists():
+        ROOT.after(0, lambda t=text: _do_update_status(t))
+
+
+def _do_update_status(text: str) -> None:
+    """Called only from the Tk main thread via ROOT.after()."""
+    try:
+        if status_label and ROOT and ROOT.winfo_exists():
+            status_label.configure(text=_(text))
+    except Exception:
+        pass  # Ignore if widget was already destroyed
 
 
 def update_pop_status(text: str) -> None:
@@ -874,17 +1021,17 @@ def fetch_random_face() -> None:
 
 
 def select_source_path() -> None:
-    global RECENT_DIRECTORY_SOURCE, img_ft, vid_ft
-
+    global img_ft, vid_ft
     PREVIEW.withdraw()
     source_path = ctk.filedialog.askopenfilename(
         title=_("select an source image"),
-        initialdir=RECENT_DIRECTORY_SOURCE,
+        initialdir=modules.globals.recent_dir_source,  # FIX #3
         filetypes=[img_ft],
     )
     if is_image(source_path):
         modules.globals.source_path = source_path
-        RECENT_DIRECTORY_SOURCE = os.path.dirname(modules.globals.source_path)
+        modules.globals.recent_dir_source = os.path.dirname(source_path)
+        save_switch_states()
         image = render_image_preview(modules.globals.source_path, (200, 200))
         source_label.configure(image=image)
     else:
@@ -917,22 +1064,23 @@ def swap_faces_paths() -> None:
 
 
 def select_target_path() -> None:
-    global RECENT_DIRECTORY_TARGET, img_ft, vid_ft
-
+    global img_ft, vid_ft
     PREVIEW.withdraw()
     target_path = ctk.filedialog.askopenfilename(
         title=_("select an target image or video"),
-        initialdir=RECENT_DIRECTORY_TARGET,
+        initialdir=modules.globals.recent_dir_target,  # FIX #3
         filetypes=[img_ft, vid_ft],
     )
     if is_image(target_path):
         modules.globals.target_path = target_path
-        RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
+        modules.globals.recent_dir_target = os.path.dirname(target_path)
+        save_switch_states()
         image = render_image_preview(modules.globals.target_path, (200, 200))
         target_label.configure(image=image)
     elif is_video(target_path):
         modules.globals.target_path = target_path
-        RECENT_DIRECTORY_TARGET = os.path.dirname(modules.globals.target_path)
+        modules.globals.recent_dir_target = os.path.dirname(target_path)
+        save_switch_states()
         video_frame = render_video_preview(target_path, (200, 200))
         target_label.configure(image=video_frame)
     else:
@@ -941,7 +1089,7 @@ def select_target_path() -> None:
 
 
 def select_output_path(start: Callable[[], None]) -> None:
-    global RECENT_DIRECTORY_OUTPUT, img_ft, vid_ft
+    global img_ft, vid_ft
 
     if is_image(modules.globals.target_path):
         output_path = ctk.filedialog.asksaveasfilename(
@@ -949,7 +1097,7 @@ def select_output_path(start: Callable[[], None]) -> None:
             filetypes=[img_ft],
             defaultextension=".png",
             initialfile="output.png",
-            initialdir=RECENT_DIRECTORY_OUTPUT,
+            initialdir=modules.globals.recent_dir_output,  # FIX #3
         )
     elif is_video(modules.globals.target_path):
         output_path = ctk.filedialog.asksaveasfilename(
@@ -957,13 +1105,22 @@ def select_output_path(start: Callable[[], None]) -> None:
             filetypes=[vid_ft],
             defaultextension=".mp4",
             initialfile="output.mp4",
-            initialdir=RECENT_DIRECTORY_OUTPUT,
+            initialdir=modules.globals.recent_dir_output,  # FIX #3
         )
     else:
         output_path = None
+
     if output_path:
+        # FIX #6: Auto-add timestamp if file already exists
+        if os.path.exists(output_path):
+            import time as _time
+            name, ext = os.path.splitext(output_path)
+            output_path = f"{name}_{_time.strftime('%Y%m%d_%H%M%S')}{ext}"
+
         modules.globals.output_path = output_path
-        RECENT_DIRECTORY_OUTPUT = os.path.dirname(modules.globals.output_path)
+        modules.globals.recent_dir_output = os.path.dirname(output_path)
+        save_switch_states()  # FIX #3: persist output dir
+        modules.globals.processing_cancelled = False  # reset cancel flag
         start()
 
 
@@ -1067,7 +1224,7 @@ def update_preview(frame_number: int = 0) -> None:
         PREVIEW.deiconify()
 
 
-def webcam_preview(root: ctk.CTk, camera_index: int):
+def webcam_preview(root: ctk.CTk, camera_index: int, use_virtual_cam: bool = False):
     global POPUP_LIVE
 
     if POPUP_LIVE and POPUP_LIVE.winfo_exists():
@@ -1083,11 +1240,11 @@ def webcam_preview(root: ctk.CTk, camera_index: int):
         from modules.face_analyser import get_face_analyser
         get_face_analyser()
         get_face_swapper()
-        create_webcam_preview(camera_index)
+        create_webcam_preview(camera_index, use_virtual_cam)
     else:
         modules.globals.source_target_map = []
         create_source_target_popup_for_webcam(
-            root, modules.globals.source_target_map, camera_index
+            root, modules.globals.source_target_map, camera_index, use_virtual_cam
         )
 
 
@@ -1177,9 +1334,7 @@ def _capture_thread_func(cap, capture_queue, stop_event):
 
 
 def _processing_thread_func(capture_queue, processed_queue, stop_event):
-    """Processing thread: takes raw frames from capture_queue, runs face
-    detection (throttled to every 3rd frame), applies face swap/enhancement,
-    and puts results into processed_queue."""
+    """Processing thread: face swap + FPS throttle to prevent CPU thermal throttling."""
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = None
     last_source_path = None
@@ -1192,6 +1347,9 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
     cached_many_faces = None
 
     while not stop_event.is_set():
+        # FIX #14: Throttle to target_live_fps to avoid CPU thermal throttling
+        _frame_start = time.time()
+
         try:
             frame = capture_queue.get(timeout=0.05)
         except queue.Empty:
@@ -1207,7 +1365,6 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                 last_source_path = modules.globals.source_path
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-            # Run detection every 3 frames, reuse cached result otherwise
             det_count += 1
             if det_count % 3 == 0:
                 if modules.globals.many_faces:
@@ -1228,7 +1385,6 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                     if modules.globals.fp_ui.get("face_enhancer_gpen512", False):
                         temp_frame = frame_processor.process_frame(None, temp_frame)
                 elif frame_processor.NAME == "DLC.FACE-SWAPPER":
-                    # Use cached face positions from detection thread
                     swapped_bboxes = []
                     if modules.globals.many_faces and cached_many_faces:
                         result = temp_frame.copy()
@@ -1241,7 +1397,6 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                         temp_frame = frame_processor.swap_face(source_image, cached_target_face, temp_frame)
                         if hasattr(cached_target_face, 'bbox') and cached_target_face.bbox is not None:
                             swapped_bboxes.append(cached_target_face.bbox.astype(int))
-                    # Apply post-processing (sharpening, interpolation)
                     temp_frame = frame_processor.apply_post_processing(temp_frame, swapped_bboxes)
                 else:
                     temp_frame = frame_processor.process_frame(source_image, temp_frame)
@@ -1258,7 +1413,7 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
                 else:
                     temp_frame = frame_processor.process_frame_v2(temp_frame)
 
-        # Calculate and display FPS
+        # FPS counter
         current_time = time.time()
         frame_count += 1
         if current_time - prev_time >= fps_update_interval:
@@ -1267,17 +1422,12 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
             prev_time = current_time
 
         if modules.globals.show_fps:
+            target = getattr(modules.globals, 'target_live_fps', 15)
             cv2.putText(
-                temp_frame,
-                f"FPS: {fps:.1f}",
-                (10, 30),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                1,
-                (0, 255, 0),
-                2,
+                temp_frame, f"FPS: {fps:.1f} / {target}",
+                (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 255, 80), 2,
             )
 
-        # Put processed frame into output queue, dropping old frames if full
         try:
             processed_queue.put_nowait(temp_frame)
         except queue.Full:
@@ -1290,22 +1440,42 @@ def _processing_thread_func(capture_queue, processed_queue, stop_event):
             except queue.Full:
                 pass
 
+        # FIX #14: Sleep to cap at target_live_fps
+        _elapsed = time.time() - _frame_start
+        _target = 1.0 / max(1, getattr(modules.globals, 'target_live_fps', 10))
+        _sleep = _target - _elapsed
+        if _sleep > 0:
+            time.sleep(_sleep)
 
-def create_webcam_preview(camera_index: int):
+
+def create_webcam_preview(camera_index: int, use_virtual_cam: bool = False):
     global preview_label, PREVIEW
 
     cap = VideoCapturer(camera_index)
     if not cap.start(PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT, 60):
         update_status("Failed to start camera")
         return
+        
+    vcam = None
+    if use_virtual_cam:
+        try:
+            import pyvirtualcam
+            vcam = pyvirtualcam.Camera(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT, fps=30)
+            update_status("Virtual Camera started!")
+        except Exception as e:
+            update_status("Failed to start Virtual Camera. Is OBS installed?")
+            print(f"Virtual Camera Error: {e}")
+            cap.release()
+            return
 
     preview_label.configure(width=PREVIEW_DEFAULT_WIDTH, height=PREVIEW_DEFAULT_HEIGHT)
     PREVIEW.deiconify()
 
     # Queues for decoupling capture from processing and processing from display.
-    # Small maxsize ensures we always work on recent frames and drop stale ones.
+    # Use maxsize=3 for smoother display — gives display thread a 1-frame buffer
+    # while still keeping latency very low.
     capture_queue = queue.Queue(maxsize=2)
-    processed_queue = queue.Queue(maxsize=2)
+    processed_queue = queue.Queue(maxsize=3)
     stop_event = threading.Event()
 
     # Start capture thread
@@ -1327,10 +1497,20 @@ def create_webcam_preview(camera_index: int):
     # Cleanup helper called from the display loop when preview closes
     def _cleanup():
         stop_event.set()
+        if vcam:
+            try:
+                vcam.close()
+            except:
+                pass
         cap_thread.join(timeout=2.0)
         proc_thread.join(timeout=2.0)
         cap.release()
         PREVIEW.withdraw()
+
+    # Pre-allocate a reusable PhotoImage reference to avoid GC-induced flicker
+    _last_ctk_image = [None]
+    _last_frame_id = [None]  # Track frame identity to skip re-render of same frame
+    _display_interval_ms = [max(16, int(1000 / max(1, getattr(modules.globals, 'target_live_fps', 15))))]
 
     # Non-blocking display loop using ROOT.after() — avoids blocking the
     # Tk event loop which could cause UI freezes or re-entrancy issues
@@ -1339,37 +1519,69 @@ def create_webcam_preview(camera_index: int):
             _cleanup()
             return
 
+        _t0 = time.perf_counter()
+
         try:
             temp_frame = processed_queue.get_nowait()
         except queue.Empty:
-            ROOT.after(16, _display_next_frame)
+            # No new frame ready — keep the last displayed frame, reschedule quickly
+            ROOT.after(8, _display_next_frame)
             return
 
-        if modules.globals.live_resizable:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
-        else:
-            temp_frame = fit_image_to_size(
-                temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
-            )
-        temp_frame = temp_frame.copy()
-        image = gpu_cvt_color(temp_frame, cv2.COLOR_BGR2RGB)
-        image = Image.fromarray(image)
-        image = ImageOps.contain(
-            image, (temp_frame.shape[1], temp_frame.shape[0]), Image.LANCZOS
-        )
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
+        if use_virtual_cam and vcam:
+            # Output to Virtual Camera
+            if temp_frame.shape[1] != PREVIEW_DEFAULT_WIDTH or temp_frame.shape[0] != PREVIEW_DEFAULT_HEIGHT:
+                frame_for_vcam = cv2.resize(temp_frame, (PREVIEW_DEFAULT_WIDTH, PREVIEW_DEFAULT_HEIGHT), interpolation=cv2.INTER_LINEAR)
+            else:
+                frame_for_vcam = temp_frame
+            frame_rgb = gpu_cvt_color(frame_for_vcam, cv2.COLOR_BGR2RGB)
+            try:
+                vcam.send(frame_rgb)
+                vcam.sleep_until_next_frame()
+            except Exception as e:
+                print(f"Virtual camera error: {e}")
+                _cleanup()
+                return
 
-        ROOT.after(16, _display_next_frame)
+        # --- Smooth display pipeline ---
+        # 1. Compute target display size from window dimensions
+        win_w = PREVIEW.winfo_width()  or PREVIEW_DEFAULT_WIDTH
+        win_h = PREVIEW.winfo_height() or PREVIEW_DEFAULT_HEIGHT
+        
+        # 2. Fast resize using INTER_LINEAR (much faster than LANCZOS, imperceptible diff at video frame rates)
+        src_h, src_w = temp_frame.shape[:2]
+        scale = min(win_w / src_w, win_h / src_h)
+        new_w = max(1, int(src_w * scale))
+        new_h = max(1, int(src_h * scale))
+        if (new_w, new_h) != (src_w, src_h):
+            display_frame = cv2.resize(temp_frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            display_frame = temp_frame
+
+        # 3. Convert BGR→RGB once, create CTkImage — reuse size tuple to avoid allocs
+        rgb_frame = gpu_cvt_color(display_frame, cv2.COLOR_BGR2RGB)
+        pil_img   = Image.fromarray(rgb_frame)
+        ctk_img   = ctk.CTkImage(pil_img, size=(new_w, new_h))
+
+        # 4. Keep a reference to prevent GC from deleting the image between frames
+        _last_ctk_image[0] = ctk_img
+        preview_label.configure(image=ctk_img)
+
+        # 5. Adaptive scheduling — subtract the time we spent rendering so we
+        #    hit the target FPS more accurately and avoid accumulated drift
+        _elapsed_ms = int((time.perf_counter() - _t0) * 1000)
+        _target_ms  = _display_interval_ms[0]
+        # Recalculate interval in case user changed FPS slider mid-stream
+        _display_interval_ms[0] = max(16, int(1000 / max(1, getattr(modules.globals, 'target_live_fps', 15))))
+        _next_ms = max(1, _target_ms - _elapsed_ms)
+        ROOT.after(_next_ms, _display_next_frame)
 
     # Kick off the non-blocking display loop
     ROOT.after(0, _display_next_frame)
 
 
 def create_source_target_popup_for_webcam(
-        root: ctk.CTk, map: list, camera_index: int
+        root: ctk.CTk, map: list, camera_index: int, use_virtual_cam: bool = False
 ) -> None:
     global POPUP_LIVE, popup_status_label_live
 
@@ -1382,7 +1594,7 @@ def create_source_target_popup_for_webcam(
         if has_valid_map():
             simplify_maps()
             update_pop_live_status("Mappings successfully submitted!")
-            create_webcam_preview(camera_index)  # Open the preview window
+            create_webcam_preview(camera_index, use_virtual_cam)  # Open the preview window
         else:
             update_pop_live_status("At least 1 source with target is required!")
 

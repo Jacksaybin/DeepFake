@@ -30,3 +30,8 @@ install.bat
 output*.jpg
 source.jpg
 target.jpg
+
+build/
+dist/
+*.spec
+

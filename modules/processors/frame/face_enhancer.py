@@ -90,16 +90,20 @@ def get_face_enhancer() -> onnxruntime.InferenceSession:
                 )
                 providers = build_provider_config()
 
-                cpu_count = max(1, os.cpu_count() or 1)
+                cpu_count = max(1, os.cpu_count() or 1)  # 4 on Intel Core i5
                 session_options = onnxruntime.SessionOptions()
                 session_options.graph_optimization_level = (
                     onnxruntime.GraphOptimizationLevel.ORT_ENABLE_ALL
                 )
-                # Maximise CPU utilisation for each inference call
+                # Use all 4 logical threads for heavy convolution ops
                 session_options.intra_op_num_threads = cpu_count
                 session_options.inter_op_num_threads = max(1, cpu_count // 2)
                 session_options.enable_mem_pattern = True
                 session_options.enable_mem_reuse = True
+                # Avoid spin-wait burning idle CPU cycles on Intel
+                session_options.add_session_config_entry(
+                    'session.intra_op.allow_spinning', '0'
+                )
 
                 FACE_ENHANCER = onnxruntime.InferenceSession(
                     model_path,
